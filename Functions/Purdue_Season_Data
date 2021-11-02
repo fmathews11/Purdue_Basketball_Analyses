@@ -1,0 +1,53 @@
+#### Get Concatenated Box Scores For All Games In Current Season#####
+
+purdue_data <- function(...){
+  
+  library(ncaahoopR)
+  library(tidyverse)
+  library(lubridate)
+
+  
+box_scores_purdue<-function(game_id){
+  
+   sched <- get_schedule('Purdue')  
+      
+    box_scores<-get_boxscore(game_id)
+    
+    box_purdue<-box_scores$Purdue
+    
+    box_purdue<-box_purdue%>%
+      mutate(threepct = round((`3PTM`/`3PTA`),digits = 2))%>%
+      mutate(FTpct = round((FTM/FTA), digits = 2))%>%
+      unite('3s',`3PTM`:`3PTA`,sep = '-')%>%
+      unite(FTs,FTM:FTA,sep = '-')%>%
+      mutate(FGpct = round((FGM/FGA),digits = 2))%>%
+      unite(FGs,FGM:FGA,sep = '-')%>%
+      select(player,PTS,MIN,FGs,FGpct,'3s',threepct,FTs,FTpct,OREB,DREB,REB,AST,STL,BLK,TO,PF)%>%
+      mutate(threepct = replace_na(threepct,0))%>%
+      mutate(FTpct = replace_na(FTpct,0))%>%
+      mutate(gamedate =sched$date[sched$game_id == game_id] )%>%
+      mutate(location = sched$location[sched$game_id == game_id])%>%
+      mutate(opponent = sched$opponent[sched$game_id == game_id])
+}
+  
+sched <- get_schedule('Purdue')
+
+filter_date <- Sys.Date()
+
+sched <- sched%>%
+  filter(date <= filter_date)
+
+agdata<-data.frame()
+
+for (gameid in sched$game_id)
+{
+  gamedata <- box_scores_purdue(gameid)
+  agdata <- rbind(agdata, gamedata)
+  
+}
+
+data <- agdata%>%
+  filter(player != 'TEAM')
+
+return(data)
+}
