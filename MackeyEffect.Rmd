@@ -1,0 +1,367 @@
+---
+title: "Measuring The Mackey Effect"
+author: "Frank Mathews"
+date: "3/13/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(tidyverse)
+library(ncaahoopR)
+library(rmarkdown)
+library(broom)
+library(ggthemes)
+```
+
+## Goal
+
+The overall goal of this analysis is to, as accurately as possible, quantify the effect of the crowd noise within Mackey Arena.  We will be only using data from the 2014-2021 seasons, and only viewing conference games to adjust for opponent difficulty.  We will also be comparing home games to only true road games.
+
+We will begin by creating two vectors, one for the seasons we want to see, one for the opponents we want to filter by.
+
+``````{r results='asis', message=FALSE, warning=FALSE,echo = TRUE}
+seasons <- c('2014-15','2016-17','2017-18','2018-19','2019-20','2020-21')
+
+teams <- c('Indiana','Iowa','Maryland','Michigan State','Ohio State', 'Penn State','Rutgers',
+           'Illinois','Minnesota','Northwestern','Wisconsin','Nebraska','Michigan')
+
+#Checking to see if the formatting of the team names matches the ESPN ids
+
+teams %in% ids$team
+
+```
+
+## Evaluating Margins At Mackey vs Away
+
+We will first look at our scoring margins against each team at home, vs on the road, to compare how we perform.
+
+``````{r results='asis', message=FALSE, warning=FALSE,echo = TRUE}
+
+#Create and empty dataframe that will populate with the data that we want
+sched <- data.frame()
+
+for (season in seasons){
+  
+  df<-  get_schedule('Purdue',season)%>%
+    filter(opponent %in% teams)%>%
+    mutate(season = season)%>%
+    filter(location == 'H' | location == 'A')%>%
+    mutate(margin = team_score - opp_score)
+  
+  
+  sched <- rbind(sched,df)
+  
+  
+}
+#Lets see the first 20 rows of the dataset to make sure it looks good
+
+paged_table(head(sched,20))
+
+```
+
+## Signifcance
+
+Now we want to see if there is a difference between how we perform at home vs how we perform on the road.  Let's do some data wrangling!
+
+``````{r results='asis', message=FALSE, warning=FALSE,echo = TRUE}
+
+sched%>%
+  group_by(opponent,location)%>%
+  summarise(AvgMargin = round(mean(margin),digits = 2))%>%
+  group_by(location)%>%
+  summarise(mean(AvgMargin))%>%
+  kable()
+```
+So it looks like we score over 10 points more at Mackey, on average.  Is this difference in average statistically significant.  A T Test seems appropriate
+
+First we need a binary value for home vs away.  I'll creat a new column in the dataset called "home", which I will assign a value of 1 for home games, and a value of 0 for away games.
+
+``````{r results='asis', message=FALSE, warning=FALSE,echo = TRUE}
+
+sched$home <- ifelse(sched$location == "H",1,0)
+```
+Now we can conduct a proper t test.  A t test assumes that there is no difference between the average number of points we score at home vs on the road, and calculates the probability that the difference in points is due to chance.  If the probability is less than 5% (0.05), we reject this hypothesis and conclude that the difference is statistically significant
+
+``````{r results='asis', message=FALSE, warning=FALSE,echo = TRUE}
+t.test(sched$margin~sched$location)%>%
+  tidy%>%
+  as.data.frame()%>%
+  kable()
+
+```
+
+So, in this case, the estimate1 represents our average scoring when on the road, and estimate 2 represents our overage scoring margin at home.  The p-value is nearly zero, so we reject the null hypothesis and conlcude that there is, in fact, a statistically significant difference in the mean between the two groups. 
+
+## Visualise the data
+
+Let's take a look at this visually using ggplot2!
+
+``````{r results='asis', message=FALSE, warning=FALSE,echo = TRUE}
+
+
+sched%>%
+  group_by(opponent,location)%>%
+  summarise(AvgMargin = round(mean(margin),digits = 2))%>%
+  ggplot(aes(x = opponent, y = AvgMargin,label = AvgMargin,fill = location))+geom_col(color = 'Black',
+                                                                                      position = 'dodge')+
+  coord_flip()+geom_text(aes(x = opponent,y = AvgMargin),hjust = 1.2,vjust = 1)+labs(
+    title = 'Average Scoring Margin Against Big Ten Teams',
+    subtitle = 'Last 5 Seasons',
+    x = 'Avg Margin',
+    y = 'Opponent'
+  )+scale_fill_manual(values = c('#CEB888','black'))+theme_hc()
+
+```
+
+
+## Shooting and Fouls
+
+Now we're going to write a function to pull box score data for each game, taking the unique ESPN gameID as a parameter.  This will create two dataframes.  One for Purdue, one for the each opponent.
+
+Now we'll create a for loop, using the vector of team name
+
+``````{r results='asis', message=FALSE, warning=FALSE,echo = TRUE}
+
+purdue_stats <- data.frame()
+opponent_stats <- data.frame()
+
+for (game in sched$game_id){
+  try({
+  
+  
+  
+  box_scores<-get_boxscore(game)
+  
+  box_purdue<-box_scores$Purdue
+  
+  opponent_name<-sched$opponent[sched$game_id == game]
+  
+  df<-box_purdue%>%
+   mutate(threepct = round((`3PTM`/`3PTA`),digits = 2))%>%
+    mutate(FTpct = round((FTM/FTA), digits = 2))%>%
+    unite(FTs,FTM:FTA,sep = '-')%>%
+    mutate(FGpct = round((FGM/FGA),digits = 2))%>%
+    select(player,PTS,MIN,FGA,FGM,FGpct,`3PTM`,`3PTA`,threepct,FTs,FTpct,OREB,DREB,REB,AST,STL,BLK,TO,PF)%>%
+    mutate(threepct = replace_na(threepct,0))%>%
+    mutate(FTpct = replace_na(FTpct,0))%>%
+    mutate(opponent = sched$opponent[sched$game_id == game])%>%
+    mutate(gameID = game)%>%
+    mutate(location = ifelse(sched$location[sched$game_id == game] == 'H','H','A'))%>%
+    mutate(season = sched$season[sched$game_id == game])
+  
+  
+  box_opponent<-box_scores[[opponent_name]]
+  
+  df2<-box_opponent%>%
+    mutate(threepct = round((`3PTM`/`3PTA`),digits = 2))%>%
+    mutate(FTpct = round((FTM/FTA), digits = 2))%>%
+    unite(FTs,FTM:FTA,sep = '-')%>%
+    mutate(FGpct = round((FGM/FGA),digits = 2))%>%
+    select(player,PTS,MIN,FGA,FGM,FGpct,`3PTM`,`3PTA`,threepct,FTs,FTpct,OREB,DREB,REB,AST,STL,BLK,TO,PF)%>%
+    mutate(threepct = replace_na(threepct,0))%>%
+    mutate(FTpct = replace_na(FTpct,0))%>%
+    mutate(opponent = opponent_name)%>%
+    mutate(gameID = game)%>%
+    mutate(location = ifelse(sched$location[sched$game_id == game] == 'H','A','H'))%>%
+    mutate(season = sched$season[sched$game_id == game])
+  
+  purdue_stats <- rbind(purdue_stats,df)
+  opponent_stats <- rbind(opponent_stats,df2)
+  })
+}
+
+    
+
+purdue_stats <- purdue_stats%>%
+  filter(player != 'TEAM')
+
+opponent_stats <- opponent_stats%>%
+  filter(player != 'TEAM')
+
+
+```
+
+
+Let's view the first 20 rows of the data.
+
+``````{r results='asis', message=FALSE, warning=FALSE,echo = TRUE}
+purdue_stats%>%
+  head(20)%>%
+  paged_table()
+
+```
+
+
+### Now let's see how we shoot at home compared to on the road
+
+
+
+ We'll look at home and away 3pt averages, by season.
+``````{r results='asis', message=FALSE, warning=FALSE,echo = TRUE}
+
+purdue_stats%>%
+  select(player,`3PTA`,threepct,location,season)%>%
+  filter(purdue_stats$`3PTA`> 0)%>%
+  group_by(season,location)%>%
+  summarise(mean(threepct))%>%
+  kable
+
+```
+
+So there seems to be a clear trend in that we tend to shoot better at home.  Let's see the aggregate:
+
+``````{r results='asis', message=FALSE, warning=FALSE,echo = TRUE}
+
+purdue_stats%>%
+  select(player,`3PTA`,threepct,location,season)%>%
+  filter(purdue_stats$`3PTA`> 0)%>%
+  group_by(location)%>%
+  summarise(mean(threepct))%>%
+  kable
+
+```
+
+
+So we average about 6% better at home from 3.  Is this statistically significant?  Let's do another t test.
+
+``````{r results='asis', message=FALSE, warning=FALSE,echo = TRUE}
+
+
+attemptedthrees <- purdue_stats%>%
+  select(player,`3PTA`,threepct,location,season)%>%
+  filter(purdue_stats$`3PTA`> 0)%>%
+  mutate(home = ifelse(location == "H",1,0))
+
+
+
+t2 <- t.test(attemptedthrees$threepct~attemptedthrees$home)
+
+t2%>%
+  tidy%>%
+  as.data.frame()%>%
+  kable()
+
+```
+
+With a p value of .02, we conclude that the differences in 3pt shooting between home and away are significant,
+
+Now let's see it
+
+``````{r results='asis', message=FALSE, warning=FALSE,echo = TRUE}
+
+purdue_stats%>%
+  select(player,`3PTA`,threepct,location,season)%>%
+  filter(purdue_stats$`3PTA`> 0)%>%
+  group_by(season,location)%>%
+  summarise(avg3 = mean(threepct))%>%
+  ggplot(aes(x = season, y = avg3 ,fill = location))+geom_col(position = 'dodge')+scale_fill_manual(values = c('#CEB888','black'))+theme_hc()+labs(
+    x = 'Season',
+    y = 'Average 3Pt %'
+  )
+
+
+````
+
+
+
+Let's see how it compares with FG%
+
+``````{r results='asis', message=FALSE, warning=FALSE,echo = TRUE}
+
+purdue_stats%>%
+  select(player,FGA,FGpct,location,season)%>%
+  filter(purdue_stats$FGA> 0)%>%
+  group_by(season,location)%>%
+  summarise(avg3 = mean(FGpct))%>%
+  ggplot(aes(x = season, y = avg3 ,fill = location))+geom_col(position = 'dodge')+scale_fill_manual(values = c('#CEB888','black'))+theme_hc()+labs(
+    x = 'Season',
+    y = 'Average FG %'
+  )
+
+
+````
+
+
+
+What about fouls?
+
+
+
+
+
+``````{r results='asis', message=FALSE, warning=FALSE,echo = TRUE}
+
+purdue_stats%>%
+  select(player,PF,location,season,gameID)%>%
+  group_by(season,location,gameID)%>%
+  summarise(totalfouls = sum(PF))%>%
+  group_by(season,location)%>%
+  summarise(PfGame = mean(totalfouls))%>%
+  ggplot(aes(x = season, y = PfGame ,fill = location))+geom_col(position = 'dodge')+scale_fill_manual(values = c('#CEB888','black'))+theme_hc()+labs(
+    x = 'Season',
+    y = 'Avg Number of Fouls Committed Per Game'
+  )
+
+
+````
+
+
+
+
+T test for fouls
+
+
+``````{r results='asis', message=FALSE, warning=FALSE,echo = TRUE}
+t2df<-purdue_stats%>%
+  select(player,PF,location,season,gameID)%>%
+  group_by(season,location,gameID)%>%
+  summarise(totalfouls = sum(PF))%>%
+  mutate(home = as.factor(ifelse(location == 'H',1,0)))
+
+t.test(t2df$totalfouls~t2df$home)%>%
+  tidy()%>%
+  as.data.frame%>%
+  kable()
+
+
+```
+
+
+So it looks like there is NOT a statistically significant difference in the average number of fouls committed at home vs on the road.
+
+How about our opponents?
+
+``````{r results='asis', message=FALSE, warning=FALSE,echo = TRUE}
+opponent_stats%>%
+  select(player,PF,location,season,gameID,opponent)%>%
+  group_by(season,location,gameID,opponent)%>%
+  summarise(totalfouls = sum(PF))%>%
+  mutate(at_mackey = as.factor(ifelse(location == 'H',0,1)))%>%
+  group_by(opponent,at_mackey)%>%
+  summarise(PfGame = mean(totalfouls))%>%
+  kbl()%>%
+  kable_minimal(c('striped','hover'))
+
+
+
+
+```
+
+
+Is it significant?
+
+``````{r results='asis', message=FALSE, warning=FALSE,echo = TRUE}
+ttdf2<-opponent_stats%>%
+  select(player,PF,location,season,gameID)%>%
+  group_by(season,location,gameID)%>%
+  summarise(totalfouls = sum(PF))%>%
+  mutate(at_mackey = as.factor(ifelse(location == 'H',0,1)))
+
+t.test(ttdf2$totalfouls,ttdf2$at_mackey)  
+  
+```
+
+
+
