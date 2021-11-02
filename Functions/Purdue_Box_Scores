@@ -1,0 +1,45 @@
+library(tidyverse)  
+library(ncaahoopR)
+library(lubridate)
+
+
+######### Box Scores - Will Work Live During Games ##########
+
+box_scores<-function(game_id){
+  
+  box_scores<-get_boxscore(game_id)
+  
+  box_purdue<-box_scores$Purdue
+  
+  box_purdue<<-box_purdue%>%
+    mutate(threepct = round((`3PTM`/`3PTA`),digits = 2))%>%
+    mutate(FTpct = round((FTM/FTA), digits = 2))%>%
+    unite('3s',`3PTM`:`3PTA`,sep = '-')%>%
+    unite(FTs,FTM:FTA,sep = '-')%>%
+    mutate(FGpct = round((FGM/FGA),digits = 2))%>%
+    unite(FGs,FGM:FGA,sep = '-')%>%
+    select(player,PTS,MIN,FGs,FGpct,'3s',threepct,FTs,FTpct,OREB,DREB,REB,AST,STL,BLK,TO,PF)%>%
+    mutate(threepct = replace_na(threepct,0))%>%
+    mutate(FTpct = replace_na(FTpct,0))%>%
+    mutate(gameID = game_id)
+  
+  schedule<-get_schedule("Purdue")
+  
+  opponent_name<-schedule$opponent[schedule$game_id == game_id]
+  
+  box_opponent<-box_scores[[opponent_name]]
+  
+  box_opponent<<-box_opponent%>%
+    mutate(threepct = round((`3PTM`/`3PTA`),digits = 2))%>%
+    mutate(FTpct = round((FTM/FTA), digits = 2))%>%
+    unite('3s',`3PTM`:`3PTA`,sep = '-')%>%
+    unite(FTs,FTM:FTA,sep = '-')%>%
+    mutate(FGpct = round((FGM/FGA),digits = 2))%>%
+    unite(FGs,FGM:FGA,sep = '-')%>%
+    select(player,PTS,MIN,FGs,FGpct,'3s',threepct,FTs,FTpct,OREB,DREB,REB,AST,STL,BLK,TO,PF)%>%
+    mutate(threepct = replace_na(threepct,0))%>%
+    mutate(FTpct = replace_na(FTpct,0))%>%
+    mutate(opponent = opponent_name)%>%
+    mutate(gameID = game_id)
+  
+}
