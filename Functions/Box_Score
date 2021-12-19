@@ -1,0 +1,41 @@
+box_scores<-function(game_id){
+  
+  box_scores<-get_boxscore(game_id)
+  
+  team_a <-names(box_scores)[1]
+  team_b <-names(box_scores)[2]
+  
+  box_team_a<-box_scores[[team_a]]
+  
+  box_team_a<<-box_team_a%>%
+    mutate(threepct = round((`3PTM`/`3PTA`),digits = 2))%>%
+    mutate(FTpct = round((FTM/FTA), digits = 2))%>%
+    unite('3s',`3PTM`:`3PTA`,sep = '-')%>%
+    mutate(MIN = replace_na(MIN,0))%>%
+    unite(FTs,FTM:FTA,sep = '-')%>%
+    mutate(FGpct = round((FGM/FGA),digits = 2))%>%
+    unite(FGs,FGM:FGA,sep = '-')%>%
+    select(player,PTS,MIN,FGs,FGpct,'3s',threepct,FTs,FTpct,OREB,DREB,REB,AST,STL,BLK,TO,PF)%>%
+    mutate(threepct = replace_na(threepct,0))%>%
+    mutate(FTpct = replace_na(FTpct,0))%>%
+    mutate(FGpct = replace_na(FGpct,0))%>%
+    mutate(gameID = game_id)
+  
+  
+  box_team_b<-box_scores[[team_b]]
+  
+  box_team_b<<-box_team_b%>%
+    mutate(threepct = round((`3PTM`/`3PTA`),digits = 2))%>%
+    mutate(FTpct = round((FTM/FTA), digits = 2))%>%
+    mutate(MIN = replace_na(MIN,0))%>%
+    unite('3s',`3PTM`:`3PTA`,sep = '-')%>%
+    unite(FTs,FTM:FTA,sep = '-')%>%
+    mutate(FGpct = round((FGM/FGA),digits = 2))%>%
+    unite(FGs,FGM:FGA,sep = '-')%>%
+    select(player,PTS,MIN,FGs,FGpct,'3s',threepct,FTs,FTpct,OREB,DREB,REB,AST,STL,BLK,TO,PF)%>%
+    mutate(threepct = replace_na(threepct,0))%>%
+    mutate(FTpct = replace_na(FTpct,0))%>%
+    mutate(FGpct = replace_na(FGpct,0))%>%
+    mutate(gameID = game_id)
+  
+}
