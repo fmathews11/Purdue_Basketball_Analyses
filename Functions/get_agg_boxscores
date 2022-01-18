@@ -1,0 +1,41 @@
+library(tidyverse)
+library(ncaahoopR)
+get_agg_boxscores<- function(game_id){
+  test <- get_boxscore(game_id)
+  
+  team_a <- names(test)[1]
+  team_b <- names(test)[2]
+  
+  df_agg_a <- test[[team_a]]%>%
+    filter(player != "TEAM")%>%
+    summarise_at(vars(MIN:PTS),sum)%>%
+    mutate(TEAM = team_a)%>%
+    select(TEAM,FGM,FGA,'3PTM','3PTA',FTM,FTA,OREB,DREB,REB,AST,STL,BLK,TO,PF,PTS,MIN)%>%
+    mutate(POS = round((FGA-OREB)+TO+(0.44*FTA),digits = 0))%>%
+    mutate(PTS_POS =  round(PTS/POS,digits = 3))%>%
+    mutate(TO_PCT = round(100*TO/(FGA+0.44*FTA+TO),digits = 2))%>%
+    mutate(TRUE_SP = round(100*PTS/(2*(FGA+0.44*FTA)),digits = 2))
+  
+  df_agg_b <- test[[team_b]]%>%
+    filter(player != "TEAM")%>%
+    summarise_at(vars(MIN:PTS),sum)%>%
+    mutate(TEAM = team_b)%>%
+    select(TEAM,FGM,FGA,'3PTM','3PTA',FTM,FTA,OREB,DREB,REB,AST,STL,BLK,TO,PF,PTS,MIN)%>%
+    mutate(POS = round((FGA-OREB)+TO+(0.44*FTA),digits = 0))%>%
+    mutate(PTS_POS =  round(PTS/POS,digits = 3))%>%
+    mutate(TO_PCT = round(100*TO/(FGA+0.44*FTA+TO),digits = 2))%>%
+    mutate(TRUE_SP = round(100*PTS/(2*(FGA+0.44*FTA)),digits = 2))
+  
+  team_a_rebs <- df_agg_a$DREB
+  team_b_rebs <- df_agg_b$DREB
+  
+  df_agg_a <- df_agg_a%>%
+    mutate(OR_PCT = round(100*OREB/(OREB+team_b_rebs),digits = 2))
+  
+  df_agg_b <- df_agg_b%>%
+    mutate(OR_PCT = round(100*OREB/(OREB+team_a_rebs),digits = 2))
+  
+  final_df <- data.frame(t(rbind(df_agg_a,df_agg_b)))
+  names(final_df) <- c(team_a,team_b)
+  return(final_df[-1,])
+}
