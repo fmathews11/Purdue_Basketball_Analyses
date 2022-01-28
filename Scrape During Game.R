@@ -56,16 +56,23 @@ append_real_time_data <- function(game_id,df){
   base_url <- "https://www.espn.com/mens-college-basketball/playbyplay/_/gameId/"
   url <- paste(base_url, game_id, sep = "")
   tmp <- try(XML::readHTMLTable(RCurl::getURL(url)), silent = T)
-  bingo <- tmp[2]
+  if(length(tmp) == 3){
+    bingo <-tmp[2]
+    current_half <- 1
+  } else{
+    bingo <- tmp[2]
+    current_half <- 2
+  }
   bingo <- c(bingo[[1]][1])
   bingo <- bingo[[1]]
   current_time <<- bingo[2]
   
   if(current_time != last_reported_timestamp){
-    
+
     #Create the temporary dataframe
     temp_df <- append_agg_boxscores(game_id)
     temp_df$timestamp <- current_time
+    temp_df$half <- current_half
     last_reported_timestamp <<- current_time
     final_df <- (rbind(df,temp_df))
     return(final_df)
@@ -98,3 +105,8 @@ while(TRUE){
   i = i +1
 }
 
+
+########################################################################
+url <- "https://www.espn.com/mens-college-basketball/playbyplay?gameId=401369747"
+tmp <- try(XML::readHTMLTable(RCurl::getURL(url)), silent = T)
+length(tmp)
